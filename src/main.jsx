@@ -5,6 +5,36 @@ import { EXTRACTS, SECURES } from "./crises";
 import { CHARACTERS } from "./characters";
 import "./styles.css";
 
+import slowToken from "./assets/tokens/slow.png";
+import shockToken from "./assets/tokens/shock.png";
+import stunToken from "./assets/tokens/stun.png";
+import bleedToken from "./assets/tokens/bleed.png";
+import judgmentToken from "./assets/tokens/judgment.png";
+import poisonToken from "./assets/tokens/poison.png";
+import staggerToken from "./assets/tokens/stagger.png";
+import rootToken from "./assets/tokens/root.png";
+import incinerateToken from "./assets/tokens/incinerate.png";
+import hexToken from "./assets/tokens/hex.png";
+import activatedToken from "./assets/tokens/activated.png";
+import dazedToken from "./assets/tokens/dazed.png";
+import extractToken from "./assets/tokens/extract.png";
+
+const CONDITION_TOKENS = [
+  { id: "slow", label: "Slow", src: slowToken },
+  { id: "shock", label: "Shock", src: shockToken },
+  { id: "stun", label: "Stun", src: stunToken },
+  { id: "bleed", label: "Bleed", src: bleedToken },
+  { id: "judgment", label: "Judgment", src: judgmentToken },
+  { id: "poison", label: "Poison", src: poisonToken },
+  { id: "stagger", label: "Stagger", src: staggerToken },
+  { id: "root", label: "Root", src: rootToken },
+  { id: "incinerate", label: "Incinerate", src: incinerateToken },
+  { id: "hex", label: "Hex", src: hexToken },
+  { id: "activated", label: "Activated", src: activatedToken },
+  { id: "dazed", label: "Dazed", src: dazedToken }
+];
+const CONDITION_BY_ID = Object.fromEntries(CONDITION_TOKENS.map(token => [token.id, token]));
+
 const STORAGE_KEY = "mcp-stream-state-v3";
 
 const DEFAULT_STATE = {
@@ -17,11 +47,19 @@ const DEFAULT_STATE = {
   tacticsScale: 100
 };
 
+function normalizeCharacter(character) {
+  return {
+    ...character,
+    conditions: Array.isArray(character?.conditions) ? character.conditions.filter(id => CONDITION_BY_ID[id]) : [],
+    hasExtract: Boolean(character?.hasExtract)
+  };
+}
+
 function mergeState(saved) {
   return {
     ...DEFAULT_STATE, ...saved,
-    playerOne: { ...DEFAULT_STATE.playerOne, ...(saved?.playerOne ?? {}), roster: saved?.playerOne?.roster ?? [], tactics: saved?.playerOne?.tactics ?? DEFAULT_STATE.playerOne.tactics, tacticsUsed: saved?.playerOne?.tacticsUsed ?? DEFAULT_STATE.playerOne.tacticsUsed },
-    playerTwo: { ...DEFAULT_STATE.playerTwo, ...(saved?.playerTwo ?? {}), roster: saved?.playerTwo?.roster ?? [], tactics: saved?.playerTwo?.tactics ?? DEFAULT_STATE.playerTwo.tactics, tacticsUsed: saved?.playerTwo?.tacticsUsed ?? DEFAULT_STATE.playerTwo.tacticsUsed }
+    playerOne: { ...DEFAULT_STATE.playerOne, ...(saved?.playerOne ?? {}), roster: (saved?.playerOne?.roster ?? []).map(normalizeCharacter), tactics: saved?.playerOne?.tactics ?? DEFAULT_STATE.playerOne.tactics, tacticsUsed: saved?.playerOne?.tacticsUsed ?? DEFAULT_STATE.playerOne.tacticsUsed },
+    playerTwo: { ...DEFAULT_STATE.playerTwo, ...(saved?.playerTwo ?? {}), roster: (saved?.playerTwo?.roster ?? []).map(normalizeCharacter), tactics: saved?.playerTwo?.tactics ?? DEFAULT_STATE.playerTwo.tactics, tacticsUsed: saved?.playerTwo?.tacticsUsed ?? DEFAULT_STATE.playerTwo.tacticsUsed }
   };
 }
 function loadState() {
@@ -89,19 +127,39 @@ function PlayerSide({ side, player }) {
     <VPBadge side={side} value={player.vp}/>
   </section>;
 }
+function TokenImage({ token, className = "", title }) {
+  return <img className={`token-image ${className}`} src={token.src} alt={title ?? token.label} title={title ?? token.label}/>;
+}
+
 function CharacterOverlayRow({ character, side }) {
   const sideState = character.sideState ?? (character.status === "injured" ? "dazed" : "healthy");
   const overlayState = character.overlayState ?? (character.status === "ko" ? "ko" : character.status === "injured" ? "dazed" : "none");
+  const selected = new Set(character.conditions ?? []);
+  const regularConditions = CONDITION_TOKENS.filter(token => token.id !== "activated" && selected.has(token.id));
+  const activated = selected.has("activated");
+  const hasTokens = regularConditions.length > 0 || Boolean(character.hasExtract) || activated;
 
-  return <div className={`character-overlay-row ${side} ${sideState} overlay-${overlayState}`}>
-    <div className="character-row-main">
-      <span className="character-overlay-name">{character.name}</span>
-      <span className="overlay-health">♥ {character.health}/{character.maxHealth}</span>
-      <span className="overlay-power">⚡ {character.power}</span>
+  return <div className={`character-overlay-item ${side} ${hasTokens ? "has-tokens" : ""}`}>
+    <div className={`character-overlay-row ${side} ${sideState} overlay-${overlayState}`}>
+      <div className="character-row-main">
+        <span className="character-overlay-name">{character.name}</span>
+        <span className="overlay-health">♥ {character.health}/{character.maxHealth}</span>
+        <span className="overlay-power">⚡ {character.power}</span>
+      </div>
+
+      {overlayState === "dazed" && <div className="comic-stamp dazed">DAZED!</div>}
+      {overlayState === "ko" && <div className="comic-stamp ko"><span>☠</span><b>K.O.!</b><span>☠</span></div>}
     </div>
 
-    {overlayState === "dazed" && <div className="comic-stamp dazed">DAZED!</div>}
-    {overlayState === "ko" && <div className="comic-stamp ko"><span>☠</span><b>K.O.!</b><span>☠</span></div>}
+    {hasTokens && <div className={`character-overlay-token-row ${side}`}>
+      <div className="overlay-condition-tokens">
+        {regularConditions.map(token => <TokenImage key={token.id} token={token}/>) }
+      </div>
+      <div className="overlay-objective-tokens">
+        {character.hasExtract && <TokenImage token={{ src: extractToken, label: "Extract" }} className="extract-token"/>}
+        {activated && <TokenImage token={CONDITION_BY_ID.activated} className="activated-token"/>}
+      </div>
+    </div>}
   </div>;
 }
 function RosterRail({ side, roster }) {
@@ -156,7 +214,7 @@ function AddCharacter({ side, onAdd }) {
   const choose = name => { setQuery(name); };
   const add = () => {
     const name=query.trim(); if(!name) return;
-    onAdd({id:uid(), name, maxHealth:clamp(health), health:clamp(health), power:clamp(power), sideState:"healthy", overlayState:"none"});
+    onAdd({id:uid(), name, maxHealth:clamp(health), health:clamp(health), power:clamp(power), sideState:"healthy", overlayState:"none", conditions:[], hasExtract:false});
     setOpen(false); setQuery(""); setHealth(5); setPower(1);
   };
   return <>
@@ -198,6 +256,13 @@ function CharacterControl({ character, side, onChange, onRemove }) {
       ? "DAZED!"
       : "☠ K.O.!";
 
+  const selectedConditions = new Set(character.conditions ?? []);
+  const toggleCondition = id => {
+    const next = new Set(selectedConditions);
+    next.has(id) ? next.delete(id) : next.add(id);
+    set({ conditions: [...next] });
+  };
+
   return <div className={`character-control-card compact-card ${side} ${sideState} overlay-${overlayState}`}>
     <div className="compact-name">
       <strong>{character.name}</strong>
@@ -233,6 +298,34 @@ function CharacterControl({ character, side, onChange, onRemove }) {
     </button>
 
     <button className="compact-remove" onClick={onRemove}>×</button>
+
+    <div className="character-token-controls">
+      <div className="condition-token-buttons" aria-label={`${character.name} conditions`}>
+        {CONDITION_TOKENS.map(token =>
+          <button
+            type="button"
+            key={token.id}
+            className={`token-toggle ${selectedConditions.has(token.id) ? "enabled" : ""}`}
+            title={token.label}
+            aria-label={`${selectedConditions.has(token.id) ? "Disable" : "Enable"} ${token.label}`}
+            aria-pressed={selectedConditions.has(token.id)}
+            onClick={() => toggleCondition(token.id)}
+          >
+            <TokenImage token={token}/>
+          </button>
+        )}
+      </div>
+      <button
+        type="button"
+        className={`token-toggle extract-toggle ${character.hasExtract ? "enabled" : ""}`}
+        title="Extract"
+        aria-label={`${character.hasExtract ? "Disable" : "Enable"} Extract`}
+        aria-pressed={Boolean(character.hasExtract)}
+        onClick={() => set({ hasExtract: !character.hasExtract })}
+      >
+        <TokenImage token={{ src: extractToken, label: "Extract" }}/>
+      </button>
+    </div>
   </div>;
 }
 function PlayerControls({ number, side, player, onChange }) {

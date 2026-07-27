@@ -1063,3 +1063,128 @@ input:focus, select:focus { border-color: var(--blue); }
   box-sizing: border-box;
   white-space: nowrap;
 }
+
+/* V3.6 — per-character condition and extract tokens */
+.character-token-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,.09);
+}
+
+.condition-token-buttons {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.token-toggle {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 1px;
+  background: rgba(18,20,24,.88);
+  border: 2px solid transparent;
+  border-radius: 7px;
+  opacity: .72;
+}
+
+.token-toggle:hover { opacity: 1; }
+.token-toggle.enabled {
+  opacity: 1;
+  border-color: #36df68;
+  box-shadow: 0 0 0 1px rgba(54,223,104,.22), 0 0 7px rgba(54,223,104,.28);
+}
+
+.token-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.extract-toggle {
+  justify-self: end;
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+}
+
+/* The overlay card remains unchanged. Tokens sit in the transparent gap below it. */
+.character-overlay-item {
+  position: relative;
+  width: 100%;
+}
+
+.character-overlay-item.has-tokens {
+  padding-bottom: 25px;
+}
+
+.character-overlay-token-row {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.character-overlay-token-row.blue {
+  justify-content: space-between;
+  padding: 0 7px 0 14px;
+}
+
+.character-overlay-token-row.red {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  padding: 0 14px 0 7px;
+}
+
+.overlay-condition-tokens,
+.overlay-objective-tokens {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.character-overlay-token-row.red .overlay-condition-tokens {
+  flex-direction: row-reverse;
+}
+
+.character-overlay-token-row .token-image {
+  width: 31px;
+  height: 31px;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,.8));
+}
+
+/* Extract is closest to the card's inner edge; Activated is immediately to its right. */
+.character-overlay-token-row .overlay-objective-tokens {
+  gap: 1px;
+}
+
+.roster-rail {
+  gap: 5px;
+}
+
+@media (max-width: 1300px) {
+  .token-toggle {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
+  }
+  .extract-toggle {
+    width: 38px;
+    height: 38px;
+  }
+}
