@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EXTRACTS, SECURES } from "./crises";
 import { CHARACTERS } from "./characters";
+import { CHARACTER_STATS } from "./characterStats";
 import "./styles.css";
 
 import slowToken from "./assets/tokens/slow.png";
@@ -51,7 +52,9 @@ function normalizeCharacter(character) {
   return {
     ...character,
     conditions: Array.isArray(character?.conditions) ? character.conditions.filter(id => CONDITION_BY_ID[id]) : [],
-    hasExtract: Boolean(character?.hasExtract)
+    hasExtract: Boolean(character?.hasExtract),
+    power: clampPower(character?.power),
+    injuredStamina: character?.injuredStamina ?? CHARACTER_STATS[character?.name]?.injuredStamina ?? character?.maxHealth
   };
 }
 
@@ -106,6 +109,7 @@ function useSharedState() {
   return [state, update];
 }
 const clamp = n => Math.max(0, Number(n) || 0);
+const clampPower = n => Math.min(10, clamp(n));
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function shortenCrisis(name) {
@@ -199,9 +203,9 @@ function Overlay({ preview=false }) {
     <TeamTacticsRail side="red" tactics={state.playerTwo.tactics} tacticsUsed={state.playerTwo.tacticsUsed}/>
   </main>;
 }
-function Stepper({ value, onMinus, onPlus, min=0, accent="orange", compact=false }) {
+function Stepper({ value, onMinus, onPlus, min=0, max=Infinity, accent="orange", compact=false }) {
   return <div className={`stepper ${accent} ${compact ? "compact":""}`}>
-    <button onClick={onMinus} disabled={value<=min}>−</button><output>{value}</output><button onClick={onPlus}>+</button>
+    <button onClick={onMinus} disabled={value<=min}>−</button><output>{value}</output><button onClick={onPlus} disabled={value>=max}>+</button>
   </div>;
 }
 function AddCharacter({ side, onAdd }) {
@@ -211,10 +215,10 @@ function AddCharacter({ side, onAdd }) {
     if (!q) return CHARACTERS.slice(0,8);
     return CHARACTERS.filter(n=>n.toLowerCase().includes(q)).slice(0,10);
   },[query]);
-  const choose = name => { setQuery(name); };
+  const choose = name => { setQuery(name); if (CHARACTER_STATS[name]) setHealth(CHARACTER_STATS[name].healthyStamina); };
   const add = () => {
     const name=query.trim(); if(!name) return;
-    onAdd({id:uid(), name, maxHealth:clamp(health), health:clamp(health), power:clamp(power), sideState:"healthy", overlayState:"none", conditions:[], hasExtract:false});
+    onAdd({id:uid(), name, maxHealth:CHARACTER_STATS[name]?.healthyStamina ?? clamp(health), injuredStamina:CHARACTER_STATS[name]?.injuredStamina ?? clamp(health), health:0, power:clampPower(power), sideState:"healthy", overlayState:"none", conditions:[], hasExtract:false});
     setOpen(false); setQuery(""); setHealth(5); setPower(1);
   };
   return <>
@@ -227,8 +231,8 @@ function AddCharacter({ side, onAdd }) {
           {matches.map(name=><button key={name} onClick={()=>choose(name)}>{name}</button>)}
         </div>
         <div className="starting-values">
-          <label>Starting Health<input type="number" min="0" value={health} onChange={e=>setHealth(e.target.value)}/></label>
-          <label>Starting Power<input type="number" min="0" value={power} onChange={e=>setPower(e.target.value)}/></label>
+          <label>Healthy stamina (fallback for unverified characters)<input type="number" min="0" value={CHARACTER_STATS[query.trim()]?.healthyStamina ?? health} onChange={e=>setHealth(e.target.value)}/></label>
+          <label>Starting Power<input type="number" min="0" max="10" value={power} onChange={e=>setPower(e.target.value)}/></label>
         </div>
         <div className="modal-actions"><button onClick={()=>setOpen(false)}>CANCEL</button><button className={side} onClick={add}>ADD TO ROSTER</button></div>
       </div>
@@ -240,6 +244,15 @@ function CharacterControl({ character, side, onChange, onRemove }) {
   const sideState = character.sideState ?? (character.status === "injured" ? "dazed" : "healthy");
   const overlayState = character.overlayState ?? (character.status === "ko" ? "ko" : character.status === "injured" ? "dazed" : "none");
   const set = patch => onChange({ ...character, sideState, overlayState, ...patch });
+  const applyDamage = requested => {
+    const max = Math.max(0, Number(character.maxHealth) || 0);
+    const damage = Math.min(max, clamp(requested));
+    const isKO = overlayState === "ko";
+    const autoState = !isKO && max > 0 && damage >= max
+      ? (sideState === "dazed" ? "ko" : "dazed")
+      : overlayState;
+    set({ health: damage, overlayState: autoState });
+  };
 
   const toggleSideState = () => {
     set({ sideState: sideState === "healthy" ? "dazed" : "healthy" });
@@ -271,22 +284,23 @@ function CharacterControl({ character, side, onChange, onRemove }) {
     <div className="compact-stat max-stat">
       <span>♥ MAX</span>
       <Stepper compact accent="red" value={character.maxHealth}
-        onMinus={() => set({ maxHealth: clamp(character.maxHealth - 1) })}
+        onMinus={() => set({ maxHealth: clamp(character.maxHealth - 1), health: Math.min(character.health, clamp(character.maxHealth - 1)) })}
         onPlus={() => set({ maxHealth: character.maxHealth + 1 })}/>
     </div>
 
     <div className="compact-stat health-stat">
       <span>♥ HEALTH</span>
       <Stepper compact accent="red" value={character.health}
-        onMinus={() => set({ health: clamp(character.health - 1) })}
-        onPlus={() => set({ health: character.health + 1 })}/>
+        max={character.maxHealth}
+        onMinus={() => applyDamage(character.health - 1)}
+        onPlus={() => applyDamage(character.health + 1)}/>
     </div>
 
     <div className="compact-stat power-stat">
       <span>⚡ POWER</span>
-      <Stepper compact accent="green" value={character.power}
+      <Stepper compact accent="green" value={character.power} max={10}
         onMinus={() => set({ power: clamp(character.power - 1) })}
-        onPlus={() => set({ power: character.power + 1 })}/>
+        onPlus={() => set({ power: clampPower(character.power + 1) })}/>
     </div>
 
     <button className={`compact-status side-toggle ${sideState}`} onClick={toggleSideState}>
@@ -392,6 +406,47 @@ function ControlPanel() {
   const overlayUrl=`${location.origin}/overlay`;
   const setField=(f,v)=>setState(s=>({...s,[f]:v}));
   const updatePlayer=(k,p)=>setState(s=>({...s,[k]:p}));
+  // A dazed stamp marks the character that flips to its injured side.
+  // Health tracks damage taken, so clearing damage resets the counter to zero.
+  const nextRound = () => setState(s => {
+    const advance = player => ({
+      ...player,
+      roster: player.roster.map(character => {
+        const conditions = (character.conditions ?? []).filter(id => id !== "activated");
+        const ko = character.overlayState === "ko" || character.status === "ko";
+        const dazed = !ko && (character.overlayState === "dazed" ||
+          (character.overlayState == null && character.status === "injured"));
+        return {
+          ...character,
+          conditions: dazed ? [] : conditions,
+          ...(dazed ? {
+            sideState: "dazed",
+            overlayState: "none",
+            health: 0,
+            maxHealth: character.injuredStamina ?? character.maxHealth
+          } : {})
+        };
+      })
+    });
+    return {
+      ...s,
+      round: Number(s.round || 0) + 1,
+      playerOne: advance(s.playerOne),
+      playerTwo: advance(s.playerTwo)
+    };
+  });
+  const powerPhase = () => setState(s => {
+    const gain = player => ({
+      ...player,
+      roster: player.roster.map(character => ({
+        ...character,
+        power: character.overlayState === "ko" || character.status === "ko"
+          ? clampPower(character.power)
+          : clampPower(character.power + 1)
+      }))
+    });
+    return { ...s, playerOne: gain(s.playerOne), playerTwo: gain(s.playerTwo) };
+  });
   const resetMatch=()=>setState(s=>({
     ...s,
     round:1,
@@ -425,6 +480,11 @@ function ControlPanel() {
         <Stepper compact value={state.round} min={1}
           onMinus={()=>setField("round",Math.max(1,state.round-1))}
           onPlus={()=>setField("round",state.round+1)}/>
+      </div>
+
+      <div className="round-phase-actions">
+        <button type="button" className="next-round-action" onClick={nextRound}>↪ NEXT ROUND</button>
+        <button type="button" className="power-phase-action" onClick={powerPhase}>⚡ POWER PHASE</button>
       </div>
 
       <div className="threat-control">

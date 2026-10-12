@@ -1188,3 +1188,10 @@ input:focus, select:focus { border-color: var(--blue); }
     height: 38px;
   }
 }
+
+/* Round automation controls */
+.round-phase-actions { display:flex; flex-direction:column; gap:7px; min-width:130px; justify-content:center; }
+.round-phase-actions button { min-height:36px; padding:7px 10px; color:#fff; font-size:12px; font-weight:900; border-radius:5px; cursor:pointer; white-space:nowrap; }
+.next-round-action { background:#453018; border:1px solid var(--orange); }
+.power-phase-action { background:#153b23; border:1px solid #42d06b; }
+.round-phase-actions button:hover { filter:brightness(1.25); }
